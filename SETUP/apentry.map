@@ -1,0 +1,102 @@
+GAS LISTING apentry.s 			page 1
+
+
+   1              	# apentry.s: entry code of APs in 16-bit real mode, in 2nd 1KB of mtximage.
+   2              	# loaded to 0x9100:0000 during booting and runs from there.
+   3              	
+   4              	      .text	
+   5              	      .global start
+   6              	.code16           
+   7              	start: # assembled at 0 but runs at 0x91000 ==> ADD 0x91000 to all addresses
+   8 0000 FA       	      cli            
+   9 0001 8CC8     	      movw    %cs,%ax    # cs=0x9100
+  10 0003 8ED8     	      movw    %ax,%ds
+  11 0005 8EC0     	      movw    %ax,%es
+  12 0007 8ED0     	      movw    %ax,%ss
+  13              		
+  14              	# enter protected mode
+  15 0009 0F011682 	      lgdt    gdtdesc
+  15      00
+  16 000e 0F20C0   	      movl    %cr0, %eax
+  17 0011 6683C801 	      orl     $0x01,%eax
+  18 0015 0F22C0   	      movl    %eax, %cr0
+  19              		
+  20              	# do a ljmp to flush instruction cache and set CS to KCODE_SEL
+  21 0018 66EA2010 	      ljmpl   $0x08, $(0x91000+start32)  # need ljmpl for 4-byte target address
+  21      09000800 
+  22              	.code32
+  23              	start32:
+  24 0020 B8100000 	      movl    $0x10, %eax   # set KDS=0x10
+  24      00
+  25 0025 8ED8     	      movw    %ax, %ds
+  26 0027 8EC0     	      movw    %ax, %es
+  27 0029 8ED0     	      movw    %ax, %ss
+  28 002b 8EE0     	      movw    %ax, %fs
+  29 002d 8EE8     	      movw    %ax, %gs
+  30              	
+  31              	# use 4GB flat segments to get APIC's ID at 0xFEE00000
+  32 002f BB0000E0 	      movl $0xFEE00000, %ebx
+  32      FE
+  33 0034 83C320   	      addl $0x0020, %ebx       # ID register at offset 0x0020
+  34 0037 8B03     	      movl 0(%ebx), %eax       # read APIC.ID register
+  35 0039 C1E818   	      shrl $24,  %eax          # shift ID to low byte
+  36 003c 89C7     	      movl %eax, %edi          # save ID in edi
+  37              		
+  38              	# turn on paging by using the pgdir at 101000, which ID maps 0-8MB
+  39 003e B8001010 	      movl   $0x101000,%eax
+  39      00
+  40 0043 0F22D8   	      movl   %eax, %cr3
+  41 0046 0F20C0   	      movl   %cr0, %eax
+  42 0049 0D000000 	      orl    $0x80000000,%eax
+  42      80
+  43 004e 0F22C0   	      movl   %eax, %cr0
+  44 0051 EB00     	      jmp    1f
+  45              	1:
+  46              	
+  47              	#----- BSP deposited these at 0x90000 for APPs ----------
+  48              	#  0x90000 : APstart() entry address
+  49              	#       +4 : AP1's stack pointer,
+  50              	#	+8 : AP2's stack pointer
+  51              	#      +12 : AP3's stack pointer, etc.
+GAS LISTING apentry.s 			page 2
+
+
+  52              	#--------------------------------------------------------	
+  53 0053 BB000009 	      movl   $(0x90000+start), %ebx  
+  53      00
+  54 0058 89F9     	      movl   %edi,%ecx                 # AP ID number
+  55 005a C1E102   	      shll   $2,%ecx                   # multiply by 4                
+  56 005d 01CB     	      addl   %ecx, %ebx                # this AP's stack pointer
+  57 005f 8B23     	      movl   (%ebx),%esp               # set %esp
+  58 0061 57       	      pushl  %edi                      # push on ID number
+  59 0062 FF150000 	      call   *(0x90000+start)          # call APstart(ID) in smp.c
+  59      0900
+  60              		
+  61 0068 EBFE     	spin: jmp    spin                      # should never reach here  
+  62 006a 00000000 	gdt: .quad   0x0000000000000000        # null descriptor
+  62      00000000 
+  63 0072 FFFF0000 	     .quad   0x00cF9a000000FFFF        # kcs 00cF 9=PpLS=1001
+  63      009ACF00 
+  64 007a FFFF0000 	     .quad   0x00cF92000000FFFF        # kds
+  64      0092CF00 
+  65              	gdtdesc:
+  66 0082 1700     	     .word   24-1
+  67 0084 6A100900 	     .long   0x91000+gdt
+  68              	
+  69 0088 00000000 	.org 512
+  69      00000000 
+  69      00000000 
+  69      00000000 
+  69      00000000 
+  70              	
+GAS LISTING apentry.s 			page 3
+
+
+DEFINED SYMBOLS
+           apentry.s:7      .text:0000000000000000 start
+           apentry.s:65     .text:0000000000000082 gdtdesc
+           apentry.s:23     .text:0000000000000020 start32
+           apentry.s:61     .text:0000000000000068 spin
+           apentry.s:62     .text:000000000000006a gdt
+
+NO UNDEFINED SYMBOLS
