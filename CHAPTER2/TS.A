@@ -1,0 +1,23 @@
+;- ts.a file
+DSEG
+	public h_,g_
+CSEG
+	public getbp_,mysum_
+
+CSEG
+getbp_:
+	mov ax, bp
+	ret
+
+mysum_:
+	push bp
+	mov bp, sp
+	mov ax, [bp+4]
+	add ax, [bp+6]
+	add ax, h_
+	mov sp, bp
+	pop bp
+	ret
+
+DSEG
+g_	dw 1234
